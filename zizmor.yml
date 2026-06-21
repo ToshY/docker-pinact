@@ -4,3 +4,6 @@ rules:
     config:
       policies:
         "*": hash-pin
+  dependabot-cooldown:
+    config:
+      days: 3
