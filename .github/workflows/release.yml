@@ -65,7 +65,7 @@ jobs:
 
           echo "Checking if image with tag $LATEST_APPLICATION_VERSION exists on GHCR."
 
-          RESPONSE=$(skopeo list-tags "docker://${GHCR_SLUG}" --creds "${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}")
+          RESPONSE=$(skopeo list-tags "docker://${GHCR_SLUG}" --creds "${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}" 2>&1) || true
 
           echo "IMAGE_EXISTS=false" >> "$GITHUB_OUTPUT"
           if echo "$RESPONSE" | jq -e '.Tags' >/dev/null 2>&1; then
