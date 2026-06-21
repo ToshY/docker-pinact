@@ -59,7 +59,7 @@ jobs:
           INPUT_FORCE: ${{ github.event.inputs.FORCE }}
           LATEST_APPLICATION_VERSION: ${{ env.LATEST_APPLICATION_VERSION }}
         run: |
-          if [ ! -z "$INPUT_APPLICATION_VERSION" ]; then
+          if [ -n "$INPUT_APPLICATION_VERSION" ]; then
             echo "Input 'APPLICATION_VERSION' is set to '$INPUT_APPLICATION_VERSION'."
             echo "LATEST_APPLICATION_VERSION=$INPUT_APPLICATION_VERSION" >> "$GITHUB_OUTPUT"
           else

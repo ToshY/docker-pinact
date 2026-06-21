@@ -21,7 +21,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: actionLint
+      - name: actionlint
         uses: eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982 # v1.10.2
         with:
           version: "1.7.12"
