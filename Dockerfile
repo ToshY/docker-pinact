@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26 AS builder
+FROM golang:1.26.4 AS builder
 
 # renovate: datasource=github-tags depName=suzuki-shunsuke/pinact
 ARG APPLICATION_VERSION=4.1.0
