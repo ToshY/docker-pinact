@@ -37,12 +37,8 @@ jobs:
       IMAGE_EXISTS: ${{ steps.check_image.outputs.IMAGE_EXISTS }}
       APPLICATION_VERSION: ${{ steps.check_image.outputs.LATEST_APPLICATION_VERSION }}
     steps:
-      - name: Skopeo
-        uses: supplypike/setup-bin@8365380a806a88e7a0f0d07059b175ca2f5418d7 # v5.0.1
-        with:
-          uri: 'https://github.com/lework/skopeo-binary/releases/download/v1.23.0/skopeo-linux-amd64'
-          name: 'skopeo'
-          version: 'v1.23.0'
+      - name: Install skopeo
+        run: sudo apt-get install -y skopeo
 
       - name: Check latest release
         id: application_tag
