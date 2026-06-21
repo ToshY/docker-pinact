@@ -1,0 +1,28 @@
+name: Security check
+
+on:
+  schedule:
+    - cron: '30 2 * * 0'
+  workflow_dispatch:
+
+env:
+  GHCR_SLUG: ghcr.io/toshy/docker-pinact
+
+jobs:
+  check:
+    name: Image security check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Scan for vulnerabilities
+        uses: crazy-max/ghaction-container-scan@a0a3900b79d158c85ccf034e5368fae620a9233a # v4.0.0
+        with:
+          image: ${{ env.GHCR_SLUG }}
+          severity_threshold: CRITICAL
+          annotations: true
+        env:
+          TRIVY_TIMEOUT: 5m
+          TRIVY_IGNORE_UNFIXED: true
+          TRIVY_DISABLE_VEX_NOTICE: true

@@ -1,0 +1,83 @@
+version: '3'
+
+env:
+  UID:
+    sh: id -u
+  GID:
+    sh: id -g
+  TTY: ''
+  HADOLINT_IMAGE: ghcr.io/hadolint/hadolint:v2.14.0
+  ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12
+  ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.25.2
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  # Build
+  build:
+    desc: Build the Docker image
+    silent: true
+    vars:
+      APPLICATION_VERSION: 4.1.0
+    cmds:
+      - docker buildx bake --set *.args.APPLICATION_VERSION={{.APPLICATION_VERSION}}
+
+  # Pinact
+  pinact:
+    desc: Pinact
+    summary: |
+      Run the Pinact CLI
+      
+      Examples: 
+      $ task pinact
+      
+      $ task pinact -- run --diff
+      
+      $ task pinact -- run --fix
+    silent: true
+    vars:
+      APPLICATION_VERSION: 4.1.0
+      PINACT_LOG_LEVEL: '{{ .l | default "info" }}'
+      PINACT_GITHUB_TOKEN:
+        sh: gh auth token
+    cmds:
+      - (docker image inspect docker-pinact:local &>/dev/null || docker buildx bake --set *.args.APPLICATION_VERSION={{.APPLICATION_VERSION}}) && docker run --rm -v $(pwd):/repo -e PINACT_GITHUB_TOKEN={{.PINACT_GITHUB_TOKEN}} -e PINACT_LOG_LEVEL={{.PINACT_LOG_LEVEL}} -u $(id -u):$(id -g) docker-pinact:local {{.CLI_ARGS | default "run --diff"}}
+
+  # Git
+  git:hooks:
+    desc: Setup hooks
+    silent: true
+    cmds:
+      - |
+        GIT_HOOKS_DIR="{{.ROOT_DIR}}/.githooks"
+        TARGET_HOOKS_DIR="{{.ROOT_DIR}}/.git/hooks"
+
+        # Create the hooks directory if it does not exist
+        mkdir -p "$TARGET_HOOKS_DIR"
+
+        # Symlink each hook script from .githooks to .git/hooks
+        for hook in $(ls "$GIT_HOOKS_DIR"); do
+          ln -sf "$GIT_HOOKS_DIR/$hook" "$TARGET_HOOKS_DIR/$hook"
+        done
+
+        printf "\033[32m%s\033[0m\n" "[git] hooks installed."
+
+  # Linting
+  hadolint:
+    desc: Lint all Dockerfiles
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo" -w /repo {{.HADOLINT_IMAGE}} hadolint /repo/Dockerfile
+
+  actionlint:
+    desc: Lint GitHub Actions workflows in .github/workflows
+    silent: true
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo" -w /repo "{{.ACTIONLINT_IMAGE}}" -color
+
+  zizmor:
+    desc: Audit GitHub Actions workflows for security issues in .github/workflows
+    silent: true
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/repo" -w /repo "{{.ZIZMOR_IMAGE}}" --color=always --collect=workflows .

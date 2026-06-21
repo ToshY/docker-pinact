@@ -1,0 +1,291 @@
+name: Release docker image
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      APPLICATION_VERSION:
+        description: 'Application version'
+        required: false
+      FORCE:
+        type: choice
+        description: 'Force recreate image'
+        required: false
+        default: 'false'
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+
+env:
+  GHCR_SLUG: ghcr.io/toshy/docker-pinact
+  APPLICATION_REPOSITORY_OWNER: suzuki-shunsuke
+  APPLICATION_REPOSITORY_SLUG: pinact
+
+jobs:
+  check:
+    name: Check version
+    runs-on: ubuntu-24.04
+    outputs:
+      IMAGE_EXISTS: ${{ steps.check_image.outputs.IMAGE_EXISTS }}
+      APPLICATION_VERSION: ${{ steps.check_image.outputs.LATEST_APPLICATION_VERSION }}
+    steps:
+      - name: Skopeo
+        uses: supplypike/setup-bin@8365380a806a88e7a0f0d07059b175ca2f5418d7 # v5.0.1
+        with:
+          uri: 'https://github.com/lework/skopeo-binary/releases/download/v1.23.0/skopeo-linux-amd64'
+          name: 'skopeo'
+          version: 'v1.23.0'
+
+      - name: Check latest release
+        id: application_tag
+        run: |
+          APPLICATION_TAG=$(curl -s https://github.com/${{ env.APPLICATION_REPOSITORY_OWNER }}/${{ env.APPLICATION_REPOSITORY_SLUG }}/tags | grep '/${{ env.APPLICATION_REPOSITORY_SLUG }}/archive/refs/tags/' | grep '.tar.gz' | head -n 1 | sed -n 's/.*refs\/tags\/v\(.*\)\.tar\.gz".*/\1/p')
+          echo "Latest application tag: $APPLICATION_TAG"
+          echo "LATEST_APPLICATION_VERSION=$APPLICATION_TAG" >> "$GITHUB_ENV"
+          echo "REGISTRY_IMAGE=${GHCR_SLUG#ghcr.io/}" >> "$GITHUB_ENV"
+
+      - name: Check if a new image is needed
+        id: check_image
+        env:
+          INPUT_APPLICATION_VERSION: ${{ github.event.inputs.APPLICATION_VERSION }}
+          INPUT_FORCE: ${{ github.event.inputs.FORCE }}
+          LATEST_APPLICATION_VERSION: ${{ env.LATEST_APPLICATION_VERSION }}
+        run: |
+          if [ ! -z "$INPUT_APPLICATION_VERSION" ]; then
+            echo "Input 'APPLICATION_VERSION' is set to '$INPUT_APPLICATION_VERSION'."
+            echo "LATEST_APPLICATION_VERSION=$INPUT_APPLICATION_VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "Input 'APPLICATION_VERSION' is empty or not provided. Defaulting to '$LATEST_APPLICATION_VERSION'."
+            echo "LATEST_APPLICATION_VERSION=$LATEST_APPLICATION_VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "Checking if image with tag $LATEST_APPLICATION_VERSION exists on GHCR."
+
+          RESPONSE=$(skopeo list-tags "docker://${GHCR_SLUG}" --creds "${GITHUB_ACTOR}:${{ secrets.GITHUB_TOKEN }}")
+
+          echo "IMAGE_EXISTS=false" >> "$GITHUB_OUTPUT"
+          if echo "$RESPONSE" | jq -e '.Tags' >/dev/null 2>&1; then
+            TAG_EXISTS=$(echo "$RESPONSE" | jq -r --arg TAG "$LATEST_APPLICATION_VERSION" '.Tags[] | select(. == $TAG)')
+            if [[ -n "$TAG_EXISTS" ]]; then
+              if [ "$INPUT_FORCE" == "true" ]; then
+                echo "Image with tag $LATEST_APPLICATION_VERSION already exists. Force build step."
+              else
+                echo "Image with tag $LATEST_APPLICATION_VERSION already exists. Skip build step."
+                echo "IMAGE_EXISTS=true" >> "$GITHUB_OUTPUT"
+              fi
+            else
+              echo "Image with tag $LATEST_APPLICATION_VERSION not found. Proceed build step."
+            fi
+          else
+            echo "No current tags found. Response: $RESPONSE. Proceed build step."
+          fi
+
+  prepare:
+    name: Prepare bake definition
+    runs-on: ubuntu-24.04
+    needs:
+      - check
+    if: ${{ needs.check.outputs.IMAGE_EXISTS == 'false' }}
+    outputs:
+      matrix: ${{ steps.platforms.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create matrix
+        id: platforms
+        run: |
+          echo "matrix=$(docker buildx bake image-all --print | jq -cr '.target."image-all".platforms')" >> "${GITHUB_OUTPUT}"
+
+      - name: Show matrix
+        env:
+          MATRIX: ${{ steps.platforms.outputs.matrix }}
+        run: |
+          echo "$MATRIX"
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: |
+            ${{ env.GHCR_SLUG }}
+          tags: |
+            type=raw,value=latest,enable=true
+            type=raw,value=${{ needs.check.outputs.APPLICATION_VERSION }}
+          labels: |
+            org.opencontainers.image.vendor=ToshY
+
+      - name: Rename meta bake definition file
+        env:
+          BAKE_FILE: ${{ steps.meta.outputs.bake-file }}
+        run: |
+          mv "$BAKE_FILE" "/tmp/bake-meta.json"
+
+      - name: Upload meta bake definition
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bake-meta
+          path: /tmp/bake-meta.json
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build image
+    needs:
+      - check
+      - prepare
+    runs-on: ${{ startsWith(matrix.platform, 'linux/arm') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Prepare
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Download meta bake definition
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bake-meta
+          path: /tmp
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        id: bake
+        uses: docker/bake-action@6614cfa25eff9a0b2b2697efb0b6159e7680d584 # v7.2.0
+        with:
+          source: .
+          files: |
+            ./docker-bake.hcl
+            /tmp/bake-meta.json
+          targets: image
+          set: |
+            *.args.APPLICATION_VERSION=${{ needs.check.outputs.APPLICATION_VERSION }}
+            *.tags=
+            *.platform=${{ matrix.platform }}
+            *.cache-from=type=gha,scope=build-${{ env.PLATFORM_PAIR }}
+            *.cache-to=type=gha,scope=build-${{ env.PLATFORM_PAIR }}
+            *.output=type=image,"name=${{ env.GHCR_SLUG  }}",push-by-digest=true,name-canonical=true,push=true            
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ fromJSON(steps.bake.outputs.metadata).image['containerimage.digest'] }}
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Push image
+    runs-on: ubuntu-24.04
+    needs:
+      - build
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download meta bake definition
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bake-meta
+          path: /tmp
+
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          # shellcheck disable=SC2046
+          docker buildx imagetools create $(jq -cr '.target."docker-metadata-action".tags | map(select(startswith("${{ env.GHCR_SLUG }}")) | "-t " + .) | join(" ")' /tmp/bake-meta.json) \
+            $(printf '${{ env.GHCR_SLUG }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect "${{ env.GHCR_SLUG }}:$(jq -r '.target."docker-metadata-action".args.DOCKER_META_VERSION' /tmp/bake-meta.json)"
+
+  test:
+    name: Test image
+    runs-on: ubuntu-24.04
+    needs:
+      - check
+      - merge
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test
+        env:
+          APPLICATION_VERSION: ${{ needs.check.outputs.APPLICATION_VERSION }}
+          WORKSPACE: ${{ github.workspace }}
+        run: |
+          docker run --rm \
+            -v "$WORKSPACE:/repo" \
+            -e PINACT_LOG_LEVEL=debug \
+            "ghcr.io/toshy/docker-pinact:$APPLICATION_VERSION" run --diff
