@@ -6,9 +6,9 @@ env:
   GID:
     sh: id -g
   TTY: ''
-  HADOLINT_IMAGE: ghcr.io/hadolint/hadolint:v2.14.0
+  HADOLINT_IMAGE: ghcr.io/hadolint/hadolint:v2.15.1
   ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12
-  ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.25.2
+  ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.30.0
 
 tasks:
   default:

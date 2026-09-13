@@ -90,6 +90,11 @@ the image works.
   reference them as shell variables (`"$MY_VAR"`) — this repo consistently does so to avoid
   template-injection findings.
 - Runners are pinned to `ubuntu-24.04` (`ubuntu-24.04-arm` for arm builds).
+- **Keep local linter pins in sync with CI.** `Taskfile.yml` and `.githooks/pre-commit` pin tool
+  images by tag, while the lint workflows use the actions' bundled versions. When Dependabot bumps
+  `hadolint/hadolint-action`, bump `HADOLINT_IMAGE` (and the hook) to the same hadolint version —
+  otherwise local checks pass and CI fails (e.g. DL3066 exists in 2.15.x but not 2.14.0).
+- `USER` must use the **numeric** distroless `nonroot` id (`65532:65532`), not the name (DL3066).
 - Job-level `permissions:` are declared explicitly and kept minimal.
 - pinact CLI flags: since pinact v5 (cobra), long flags **require two dashes** (`--diff`, not
   `-diff`). Short flags (`-c`, `-u`, `-m`, `-i`, `-e`) are unchanged.

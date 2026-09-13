@@ -25,6 +25,6 @@ WORKDIR /repo
 
 COPY --from=builder /go/bin/pinact /pinact
 
-USER nonroot:nonroot
+USER 65532:65532
 
 ENTRYPOINT ["/pinact"]

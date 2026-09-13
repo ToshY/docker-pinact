@@ -56,7 +56,7 @@ WORKFLOW_STAGED_FILES=$(git diff --cached --name-only --diff-filter=AMR \
   | xargs)
 if [ "$WORKFLOW_STAGED_FILES" ]; then
   run_command "Actionlint" "docker run --rm -v \"$(pwd):/repo\" --workdir /repo rhysd/actionlint:1.7.12 -color $WORKFLOW_STAGED_FILES"
-  run_command "Zizmor" "docker run --rm -v \"$(pwd):/repo\" --workdir /repo ghcr.io/zizmorcore/zizmor:1.25.2 --color=always $WORKFLOW_STAGED_FILES"
+  run_command "Zizmor" "docker run --rm -v \"$(pwd):/repo\" --workdir /repo ghcr.io/zizmorcore/zizmor:1.30.0 --color=always $WORKFLOW_STAGED_FILES"
   if docker image inspect docker-pinact:local >/dev/null 2>&1; then
     run_command "Pinact" "docker run --rm -v \"$(pwd):/repo\" docker-pinact:local run --diff $WORKFLOW_STAGED_FILES"
   else
@@ -78,7 +78,7 @@ DOCKERFILE_STAGED_FILES=$(git diff --cached --name-only --diff-filter=AMR \
   | grep -E '^Dockerfile$' \
   | xargs)
 if [ "$DOCKERFILE_STAGED_FILES" ]; then
-  run_command "Hadolint" "docker run --rm -v \"$(pwd):/repo\" --workdir /repo ghcr.io/hadolint/hadolint:v2.14.0 hadolint $DOCKERFILE_STAGED_FILES"
+  run_command "Hadolint" "docker run --rm -v \"$(pwd):/repo\" --workdir /repo ghcr.io/hadolint/hadolint:v2.15.1 hadolint $DOCKERFILE_STAGED_FILES"
 
   wait
   report_failures "/tmp/Hadolint_pre-commit"
