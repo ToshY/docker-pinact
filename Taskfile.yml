@@ -20,7 +20,8 @@ tasks:
     desc: Build the Docker image
     silent: true
     vars:
-      APPLICATION_VERSION: 4.1.0
+      # renovate: source=github-tags name=suzuki-shunsuke/pinact
+      APPLICATION_VERSION: 5.0.0
     cmds:
       - docker buildx bake --set *.args.APPLICATION_VERSION={{.APPLICATION_VERSION}}
 
@@ -38,7 +39,8 @@ tasks:
       $ task pinact -- run --fix
     silent: true
     vars:
-      APPLICATION_VERSION: 4.1.0
+      # renovate: source=github-tags name=suzuki-shunsuke/pinact
+      APPLICATION_VERSION: 5.0.0
       PINACT_LOG_LEVEL: '{{ .l | default "info" }}'
       PINACT_GITHUB_TOKEN:
         sh: gh auth token
