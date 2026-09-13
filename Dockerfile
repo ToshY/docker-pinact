@@ -1,14 +1,15 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.26 AS builder
+FROM golang:1.27 AS builder
 
-# renovate: datasource=github-tags depName=suzuki-shunsuke/pinact
-ARG APPLICATION_VERSION=4.1.0
+# renovate: source=github-tags name=suzuki-shunsuke/pinact
+ARG APPLICATION_VERSION=5.0.0
 ARG TARGETARCH
 ARG TARGETVARIANT
 
-RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} \
-    go install github.com/suzuki-shunsuke/pinact/v4/cmd/pinact@v${APPLICATION_VERSION}
+RUN APPLICATION_MAJOR_VERSION="${APPLICATION_VERSION%%.*}" && \
+    CGO_ENABLED=0 GOARCH="${TARGETARCH}" GOARM="${TARGETVARIANT#v}" GOTOOLCHAIN=auto \
+    go install "github.com/suzuki-shunsuke/pinact/v${APPLICATION_MAJOR_VERSION}/cmd/pinact@v${APPLICATION_VERSION}"
 
 FROM gcr.io/distroless/static-debian13:nonroot AS release
 
