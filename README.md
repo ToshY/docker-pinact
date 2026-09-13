@@ -47,7 +47,7 @@ docker run --rm \
 Build docker image from [`docker-bake.hcl`](./docker-bake.hcl) with the `APPLICATION_VERSION` argument set to the desired pinact version.
 
 ```shell
-docker buildx bake --set *.args.APPLICATION_VERSION=4.1.0
+docker buildx bake --set *.args.APPLICATION_VERSION=5.0.0
 ```
 
 The built image will be available with the default tag `docker-pinact:local`.
