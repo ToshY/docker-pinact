@@ -1,0 +1,52 @@
+name: Update pinact version
+pipelineid: pinact
+
+sources:
+  latestVersion:
+    name: Latest pinact version
+    kind: githubrelease
+    spec:
+      owner: suzuki-shunsuke
+      repository: pinact
+      token: '{{ requiredEnv .github.token }}'
+      username: '{{ .github.username }}'
+      typefilter:
+        release: true
+      versionfilter:
+        kind: semver
+        pattern: "*"
+    transformers:
+      - trimprefix: "v"
+
+targets:
+  applicationVersion:
+    name: Update version in Dockerfile
+    kind: file
+    sourceid: latestVersion
+    scmid: github
+    spec:
+      file: Dockerfile
+      matchpattern: "ARG APPLICATION_VERSION=([0-9]+\\.[0-9]+\\.[0-9]+)"
+      replacepattern: 'ARG APPLICATION_VERSION={{ source "latestVersion" }}'
+
+scms:
+  github:
+    kind: github
+    spec:
+      owner: ToshY
+      repository: docker-pinact
+      branch: main
+      user: '{{ .github.user }}'
+      username: '{{ .github.username }}'
+      email: '{{ .github.email }}'
+      token: '{{ requiredEnv .github.token }}'
+
+actions:
+  default:
+    kind: github/pullrequest
+    scmid: github
+    title: 'chore: update pinact to {{ source "latestVersion" }}'
+    spec:
+      labels:
+        - dependencies
+      publish: true
