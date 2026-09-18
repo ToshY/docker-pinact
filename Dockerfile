@@ -2,7 +2,6 @@
 
 FROM golang:1.27 AS builder
 
-# renovate: source=github-tags name=suzuki-shunsuke/pinact
 ARG APPLICATION_VERSION=5.0.0
 ARG TARGETARCH
 ARG TARGETVARIANT
